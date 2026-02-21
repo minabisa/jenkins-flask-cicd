@@ -23,16 +23,16 @@ pipeline {
     }
 
     stage('Smoke Test') {
-      steps {
-        sh """
-          docker rm -f testflask || true
-          docker run -d --name testflask -p 5000:5000 ${IMAGE}:${SHA}
-          sleep 2
-          curl -f http://localhost:5000/ || (docker logs testflask && exit 1)
-          docker rm -f testflask
-        """
-      }
-    }
+  steps {
+    sh """
+      docker rm -f testflask || true
+      docker run -d --name testflask --network ci ${IMAGE}:${SHA}
+      sleep 3
+      curl -f http://testflask:5000/ || (docker logs testflask && exit 1)
+      docker rm -f testflask
+    """
+  }
+}
 
     stage('Push to Docker Hub') {
       steps {
