@@ -1,0 +1,50 @@
+---
+- name: Install Docker and run Jenkins container
+  hosts: jenkins
+  become: true
+
+  vars:
+    jenkins_image: "jenkins/jenkins:lts"
+    jenkins_container: "jenkins"
+    jenkins_volume: "jenkins_home"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install Docker and pip
+      apt:
+        name:
+          - docker.io
+          - python3-pip
+        state: present
+
+    - name: Enable and start Docker
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Install Python Docker SDK
+      pip:
+        name: docker
+        state: present
+
+    - name: Create Jenkins volume
+      community.docker.docker_volume:
+        name: "{{ jenkins_volume }}"
+
+    - name: Run Jenkins container (uses host Docker socket)
+      community.docker.docker_container:
+        name: "{{ jenkins_container }}"
+        image: "{{ jenkins_image }}"
+        state: started
+        restart_policy: always
+        published_ports:
+          - "8080:8080"
+          - "50000:50000"
+        volumes:
+          - "{{ jenkins_volume }}:/var/jenkins_home"
+          - "/var/run/docker.sock:/var/run/docker.sock"

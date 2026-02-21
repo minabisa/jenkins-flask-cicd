@@ -1,0 +1,24 @@
+# Terraform local state and backups
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+
+# Terraform variables (where secrets live)
+*.tfvars
+*.tfvars.json
+
+# Terraform local working directory (provider binaries)
+.terraform/
+
+# Ansible local configs and retry files
+*.retry
+ansible/inventory/hosts.ini
+
+# Python bytecode and environments
+__pycache__/
+*.py[cod]
+.venv/
+env/
+
+# OS specific files
+.DS_Store
