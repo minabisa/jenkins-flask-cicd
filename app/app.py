@@ -4,7 +4,7 @@ app = Flask(__name__)
 
 @app.get("/")
 def home():
-    return {"message": "Hello from Jenkins CI/CD!"}
+    return {"message": "Hello from Jenkins CI/CD! - v2"}  # <-- changed
 
 
 if __name__ == "__main__":

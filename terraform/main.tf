@@ -47,6 +47,14 @@ resource "aws_security_group" "sg" {
     protocol    = "tcp"
     cidr_blocks = [var.allowed_jenkins_cidr]
   }
+
+  ingress {
+    description = "Jenkins UI"
+    from_port   = 8081
+    to_port     = 8081
+    protocol    = "tcp"
+    cidr_blocks = [var.allowed_jenkins_cidr]
+  }
   ingress {
     description = "Flask App"
     from_port   = 5000
