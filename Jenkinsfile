@@ -3,6 +3,7 @@ pipeline {
 
   environment {
     IMAGE = "minabisa90/flask-ci"
+    VERSION = "v2"
   }
 
   stages {
