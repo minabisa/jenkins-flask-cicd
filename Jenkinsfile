@@ -47,6 +47,29 @@ pipeline {
         }
       }
     }
+    stage("Integration Test (Local)") {
+      steps {
+        sh '''
+          # 1. Clean up any old container from a previous failed run
+          docker rm -f testflask || true
+
+          # 2. Start the container using host networking
+          # This allows 'localhost' to work between Jenkins and the container
+          docker run -d --name testflask --network host minabisa90/flask-ci:3050af2
+          
+          # 3. Wait for Flask to initialize
+          echo "Waiting for Flask to start..."
+          sleep 5
+          
+          # 4. Run the test
+          echo "Checking Flask endpoint..."
+          curl --retry 3 --retry-delay 5 http://localhost:5000
+          
+          # 5. Clean up after success
+          docker rm -f testflask
+        '''
+      }
+    }
    
 
   }
