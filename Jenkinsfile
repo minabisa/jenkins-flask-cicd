@@ -3,17 +3,20 @@ pipeline {
 
   environment {
     IMAGE = "minabisa90/flask-ci"
-    VERSION = "v2"
+    // Use the short SHA as the unique version tag
   }
 
   stages {
     stage('Checkout') {
-      steps { checkout scm }
+      steps { 
+        checkout scm 
+      }
     }
 
     stage('Build') {
       steps {
         script {
+          // Get the short SHA to use as a precise tag
           env.SHA = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
           sh """
             docker build -t ${IMAGE}:${SHA} .
@@ -24,16 +27,33 @@ pipeline {
     }
 
     stage('Smoke Test') {
-  steps {
-    sh """
-      docker rm -f testflask || true
-      docker run -d --name testflask --network ci ${IMAGE}:${SHA}
-      sleep 3
-      curl -f http://testflask:5000/ || (docker logs testflask && exit 1)
-      docker rm -f testflask
-    """
-  }
-}
+      steps {
+        sh """
+          # 1. Ensure the network exists
+          docker network create ci || true
+
+          # 2. Clean up any leftover container
+          docker rm -f testflask || true
+
+          # 3. Start the app on the 'ci' network
+          docker run -d --name testflask --network ci ${IMAGE}:${SHA}
+
+          # 4. Wait for startup
+          echo "Waiting for Flask to start..."
+          sleep 5
+
+          # 5. Run curl FROM a sidecar container on the SAME network
+          # This container can resolve the name 'testflask' via Docker DNS
+          docker run --rm --network ci alpine/curl curl -f http://testflask:5000/ || (docker logs testflask && exit 1)
+        """
+      }
+      post {
+        always {
+          // Always remove the test container to free up the name for the next build
+          sh "docker rm -f testflask || true"
+        }
+      }
+    }
 
     stage('Push to Docker Hub') {
       steps {
@@ -47,30 +67,11 @@ pipeline {
         }
       }
     }
-    stage("Integration Test (Local)") {
-      steps {
-        sh '''
-          # 1. Clean up any old container from a previous failed run
-          docker rm -f testflask || true
+  }
 
-          # 2. Start the container using host networking
-          # This allows 'localhost' to work between Jenkins and the container
-          docker run -d --name testflask --network host minabisa90/flask-ci:3050af2
-          
-          # 3. Wait for Flask to initialize
-          echo "Waiting for Flask to start..."
-          sleep 5
-          
-          # 4. Run the test
-          echo "Checking Flask endpoint..."
-          curl --retry 3 --retry-delay 5 http://localhost:5000
-          
-          # 5. Clean up after success
-          docker rm -f testflask
-        '''
-      }
+  post {
+    failure {
+      echo "❌ Pipeline failed. Check the Smoke Test logs."
     }
-   
-
   }
 }
