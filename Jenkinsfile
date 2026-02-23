@@ -47,23 +47,7 @@ pipeline {
         }
       }
     }
-   stage('Deploy') {
-  steps {
-    sh """
-      echo "Stopping old container if exists..."
-      docker rm -f flask-app || true
-
-      echo "Running new container..."
-      docker run -d \
-        --name flask-app \
-        -p 5000:5000 \
-        --restart always \
-        ${IMAGE}:latest
-
-      echo "Deployment completed."
-    """
-  }
-}
+   
 
   }
 }
