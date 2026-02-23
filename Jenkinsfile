@@ -35,20 +35,28 @@ pipeline {
           echo "Restarting container..."
           docker rm -f flask-app || true
           
-          # Run container
+          # Run container on the host's port 5000
           docker run -d --name flask-app -p 5000:5000 --restart always ${IMAGE}:${VERSION}
 
-          echo "Waiting for Flask to be ready..."
-          # Retry loop: checks every 2 seconds, up to 10 times
+          # FIND THE HOST IP: 
+          # Since Jenkins is in a container, localhost refers to Jenkins.
+          # We find the gateway IP (172.17.0.1) to reach the host's port 5000.
+          HOST_IP=\$(ip route show | grep default | awk '{print \$3}')
+          echo "Detected Host Gateway IP: \$HOST_IP"
+
+          echo "Waiting for Flask to be ready on http://\$HOST_IP:5000/ ..."
+          
           NEXT_WAIT_TIME=0
-          until [ \$NEXT_WAIT_TIME -eq 10 ] || curl -s -f http://localhost:5000/; do
+          # Retry loop: checks every 2 seconds, up to 15 times (30 seconds total)
+          until [ \$NEXT_WAIT_TIME -eq 15 ] || curl -s -f http://\$HOST_IP:5000/; do
             echo "App not ready yet... sleeping 2s"
             sleep 2
             NEXT_WAIT_TIME=\$((NEXT_WAIT_TIME+1))
           done
 
-          # Final check to fail the build if still down
-          curl -f http://localhost:5000/
+          # Final check - if this fails, the whole stage fails
+          echo "Performing final health check..."
+          curl -f http://\$HOST_IP:5000/
         """
       }
     }
@@ -56,12 +64,18 @@ pipeline {
 
   post {
     success {
-      slackSend(color: '#36a64f', message: "✅ SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER} deployed!")
+      slackSend(
+        color: '#36a64f', 
+        message: "✅ SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER} deployed and verified! 🚀"
+      )
     }
     failure {
-      // Diagnostic: Post logs to Slack or Jenkins console if it fails
+      // Capture logs for debugging if the health check fails
       sh "docker logs flask-app || true"
-      slackSend(color: '#FF0000', message: "❌ FAILURE: ${env.JOB_NAME} #${env.BUILD_NUMBER} failed.")
+      slackSend(
+        color: '#FF0000', 
+        message: "❌ FAILURE: ${env.JOB_NAME} #${env.BUILD_NUMBER} failed. Check logs for details."
+      )
     }
   }
 }
