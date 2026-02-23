@@ -7,12 +7,9 @@ pipeline {
   }
 
   stages {
-
     stage('Build') {
       steps {
-        sh """
-          docker build -t ${IMAGE}:${VERSION} .
-        """
+        sh "docker build -t ${IMAGE}:${VERSION} ."
       }
     }
 
@@ -28,20 +25,29 @@ pipeline {
       }
     }
 
-    stage('Deploy to EC2 (same host)') {
+    stage('Deploy & Health Check') {
       steps {
         sh """
-          set -eux
-
+          set -e
+          echo "Pulling latest image..."
           docker pull ${IMAGE}:${VERSION}
-          docker rm -f flask-app || true
-          docker run -d \\
-            --name flask-app \\
-            -p 5000:5000 \\
-            --restart always \\
-            ${IMAGE}:${VERSION}
 
-          sleep 3
+          echo "Restarting container..."
+          docker rm -f flask-app || true
+          
+          # Run container
+          docker run -d --name flask-app -p 5000:5000 --restart always ${IMAGE}:${VERSION}
+
+          echo "Waiting for Flask to be ready..."
+          # Retry loop: checks every 2 seconds, up to 10 times
+          NEXT_WAIT_TIME=0
+          until [ \$NEXT_WAIT_TIME -eq 10 ] || curl -s -f http://localhost:5000/; do
+            echo "App not ready yet... sleeping 2s"
+            sleep 2
+            NEXT_WAIT_TIME=\$((NEXT_WAIT_TIME+1))
+          done
+
+          # Final check to fail the build if still down
           curl -f http://localhost:5000/
         """
       }
@@ -49,26 +55,13 @@ pipeline {
   }
 
   post {
-
     success {
-      slackSend(
-        color: '#36a64f',
-        message: "✅ SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER} deployed successfully! 🚀"
-      )
+      slackSend(color: '#36a64f', message: "✅ SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER} deployed!")
     }
-
     failure {
-      slackSend(
-        color: '#FF0000',
-        message: "❌ FAILURE: ${env.JOB_NAME} #${env.BUILD_NUMBER} failed. Check Jenkins logs."
-      )
-    }
-
-    unstable {
-      slackSend(
-        color: '#FFA500',
-        message: "⚠️ UNSTABLE: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
-      )
+      // Diagnostic: Post logs to Slack or Jenkins console if it fails
+      sh "docker logs flask-app || true"
+      slackSend(color: '#FF0000', message: "❌ FAILURE: ${env.JOB_NAME} #${env.BUILD_NUMBER} failed.")
     }
   }
 }
